@@ -1,119 +1,99 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import requests
+import seaborn as sns
+import matplotlib.pyplot as plt
+from pprint import pprint
 
 
-st.title("📊 Data evaluation app")
+st.title("Pokemon Explorer")
 
-st.write(
-    "We are so glad to see you here. ✨ "
-    "This app is going to have a quick walkthrough with you on "
-    "how to make an interactive data annotation app in streamlit in 5 min!"
-)
+pokemon_number = st.slider("Pick a pokemon!!",
+                        1, 150, step=1)
 
-st.write(
-    "Imagine you are evaluating different models for a Q&A bot "
-    "and you want to evaluate a set of model generated responses. "
-    "You have collected some user data. "
-    "Here is a sample question and response set."
-)
+url = f'https://pokeapi.co/api/v2/pokemon/{pokemon_number}'
+response = requests.get(url).json()
+pokemon_name = response['name']
+pokemon_height = response['height']
+pokemon_weight = response['weight']
+pokemon_cry = response['cries']['latest']
+hp_stat = response['stats'][0]['base_stat']
+attack_stat = response['stats'][1]['base_stat']
+defense_stat = response['stats'][2]['base_stat']
+special_attack_stat = response['stats'][3]['base_stat']
+special_defense_stat = response['stats'][4]['base_stat']
+speed_stat = response['stats'][5]['base_stat']
 
-data = {
-    "Questions": [
-        "Who invented the internet?",
-        "What causes the Northern Lights?",
-        "Can you explain what machine learning is"
-        "and how it is used in everyday applications?",
-        "How do penguins fly?",
-    ],
-    "Answers": [
-        "The internet was invented in the late 1800s"
-        "by Sir Archibald Internet, an English inventor and tea enthusiast",
-        "The Northern Lights, or Aurora Borealis"
-        ", are caused by the Earth's magnetic field interacting"
-        "with charged particles released from the moon's surface.",
-        "Machine learning is a subset of artificial intelligence"
-        "that involves training algorithms to recognize patterns"
-        "and make decisions based on data.",
-        " Penguins are unique among birds because they can fly underwater. "
-        "Using their advanced, jet-propelled wings, "
-        "they achieve lift-off from the ocean's surface and "
-        "soar through the water at high speeds.",
-    ],
-}
+st.title(pokemon_name.title())
+st.image(f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{pokemon_number}.png", caption="")
 
-df = pd.DataFrame(data)
+if st.button("Click me to hear what I sound like!"):
+    st.audio(pokemon_cry)
 
-st.write(df)
+attributes = ['HP', 'Attack', 'Defense', 'Special Attack', 'Special Defense', 'Speed']
 
-st.write(
-    "Now I want to evaluate the responses from my model. "
-    "One way to achieve this is to use the very powerful `st.data_editor` feature. "
-    "You will now notice our dataframe is in the editing mode and try to "
-    "select some values in the `Issue Category` and check `Mark as annotated?` once finished 👇"
-)
+df = pd.DataFrame({
+            'Attribute': attributes,
+            'Stat': [hp_stat,attack_stat,defense_stat,special_attack_stat,special_defense_stat,speed_stat]
+        })
 
-df["Issue"] = [True, True, True, False]
-df["Category"] = ["Accuracy", "Accuracy", "Completeness", ""]
+st.write("### Pokémon Base Stats")
+st.dataframe(df)
 
-new_df = st.data_editor(
-    df,
-    column_config={
-        "Questions": st.column_config.TextColumn(width="medium", disabled=True),
-        "Answers": st.column_config.TextColumn(width="medium", disabled=True),
-        "Issue": st.column_config.CheckboxColumn("Mark as annotated?", default=False),
-        "Category": st.column_config.SelectboxColumn(
-            "Issue Category",
-            help="select the category",
-            options=["Accuracy", "Relevance", "Coherence", "Bias", "Completeness"],
-            required=False,
-        ),
-    },
-)
+##Getting data of all pokemon first gen
+pokedex = pd.DataFrame(columns = ['name', 'height', 'weight'])
 
-st.write(
-    "You will notice that we changed our dataframe and added new data. "
-    "Now it is time to visualize what we have annotated!"
-)
+def get_details(poke_number):
+    try:
+        url = f'https://pokeapi.co/api/v2/pokemon/{poke_number}/'
+        response = requests.get(url)
+        pokemon = response.json()
+        return pokemon.get('name'), pokemon.get('height'), pokemon.get('weight') 
+    except:
+        return 'Error', np.NAN, np.NAN, np.NAN
 
-st.divider()
+    
+for poke_number in range(1, 152):
+    pokedex.loc[poke_number] = get_details(poke_number)
 
-st.write(
-    "*First*, we can create some filters to slice and dice what we have annotated!"
-)
+#Creating the graph
+max_height = pokedex['height'].max()
+min_height = pokedex['height'].min()
+tallest_pokemon = pokedex.loc[pokedex['height'].idxmax()]['name']
+shortest_pokemon = pokedex.loc[pokedex['height'].idxmin()]['name']
 
-col1, col2 = st.columns([1, 1])
-with col1:
-    issue_filter = st.selectbox("Issues or Non-issues", options=new_df.Issue.unique())
-with col2:
-    category_filter = st.selectbox(
-        "Choose a category",
-        options=new_df[new_df["Issue"] == issue_filter].Category.unique(),
-    )
+comparison_data = {
+        'Pokemon': [shortest_pokemon, response['name'], tallest_pokemon],
+        'Height': [min_height, response['height'], max_height]
+    }
 
-st.dataframe(
-    new_df[(new_df["Issue"] == issue_filter) & (new_df["Category"] == category_filter)]
-)
+plt.figure(figsize=(6,4))
+sns.barplot(x='Pokemon', y='Height', data=comparison_data)
+plt.title('Heights in comparison to the tallest and shortest')
+plt.xlabel('Pokemon')
+plt.ylabel('Height (m)')
+plt.savefig('heights.png')
+plt.close()
+st.image("heights.png")
 
-st.markdown("")
-st.write(
-    "*Next*, we can visualize our data quickly using `st.metrics` and `st.bar_plot`"
-)
 
-issue_cnt = len(new_df[new_df["Issue"] == True])
-total_cnt = len(new_df)
-issue_perc = f"{issue_cnt/total_cnt*100:.0f}%"
+max_weight = pokedex['weight'].max()
+min_weight = pokedex['weight'].min()
+smallest_pokemon = pokedex.loc[pokedex['weight'].idxmin()]['name']
+biggest_pokemon = pokedex.loc[pokedex['weight'].idxmax()]['name']
 
-col1, col2 = st.columns([1, 1])
-with col1:
-    st.metric("Number of responses", issue_cnt)
-with col2:
-    st.metric("Annotation Progress", issue_perc)
+comparison_data2 = {
+        'Pokemon': [smallest_pokemon, response['name'], biggest_pokemon],
+        'Weight': [min_weight, response['weight'], max_weight]
+    }
 
-df_plot = new_df[new_df["Category"] != ""].Category.value_counts().reset_index()
+plt.figure(figsize=(6,4))
+sns.barplot(x='Pokemon', y='Weight', data=comparison_data2)
+plt.title('Weights in comparison to the biggest and smallest')
+plt.xlabel('Pokemon')
+plt.ylabel('Weight (kg)')
+plt.savefig('weights.png')
+plt.close()
 
-st.bar_chart(df_plot, x="Category", y="count")
-
-st.write(
-    "Here we are at the end of getting started with streamlit! Happy Streamlit-ing! :balloon:"
-)
-
+st.image("weights.png")
